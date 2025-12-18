@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>反應速度測試器</title>
+    <style>
+        :root {
+            --bg-color: #2c3e50;
+            --light-off: #4b1313;
+            --light-on: #ff0000;
+            --target-color: #2ecc71;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: white;
+            font-family: "Microsoft JhengHei", sans-serif;
+            overflow: hidden;
+        }
+
+        /* 紅燈指示器容器 */
+        .lights-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 50px;
+        }
+
+        .light {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: var(--light-off);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            transition: background 0.1s;
+        }
+
+        .light.active {
+            background-color: var(--light-on);
+            box-shadow: 0 0 20px var(--light-on);
+        }
+
+        /* 遊戲主區域 */
+        #game-area {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border: 2px dashed rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        /* 測試圖樣（目標） */
+        #target {
+            display: none;
+            width: 40px; /* 小於紅燈 */
+            height: 40px;
+            background-color: var(--target-color);
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        /* 資訊顯示 */
+        .info {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        #status-text {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            height: 2rem;
+        }
+
+        #result {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #f1c40f;
+        }
+
+        button {
+            padding: 10px 30px;
+            font-size: 1.2rem;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #7f8c8d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="lights-container">
+        <div id="light1" class="light"></div>
+        <div id="light2" class="light"></div>
+        <div id="light3" class="light"></div>
+    </div>
+
+    <div id="game-area" onclick="handleAreaClick()">
+        <div id="target" onclick="handleTargetClick(event)"></div>
+        <div id="status-display">點擊下方按鈕開始</div>
+    </div>
+
+    <div class="info">
+        <div id="status-text"></div>
+        <div id="result">0.000s</div>
+        <br>
+        <button id="start-btn" onclick="startGame()">開始測試</button>
+    </div>
+
+    <script>
+        const lights = [
+            document.getElementById('light1'),
+            document.getElementById('light2'),
+            document.getElementById('light3')
+        ];
+        const target = document.getElementById('target');
+        const statusText = document.getElementById('status-text');
+        const statusDisplay = document.getElementById('status-display');
+        const resultDisplay = document.getElementById('result');
+        const startBtn = document.getElementById('start-btn');
+
+        let startTime;
+        let gameActive = false;
+        let waitingForTarget = false;
+        let timeoutIds = [];
+
+        function startGame() {
+            // 重置狀態
+            resetGame();
+            startBtn.disabled = true;
+            statusText.textContent = "準備中...";
+            statusDisplay.textContent = "注意燈號";
+
+            // 依序亮起紅燈
+            lights.forEach((light, index) => {
+                let tid = setTimeout(() => {
+                    light.classList.add('active');
+                    if (index === 2) {
+                        prepareTarget();
+                    }
+                }, (index + 1) * 800);
+                timeoutIds.push(tid);
+            });
+        }
+
+        function prepareTarget() {
+            gameActive = true;
+            statusText.textContent = "等候圖樣出現...";
+            
+            // 隨機延遲 1~4 秒後出現圖樣
+            const delay = Math.random() * 3000 + 1000;
+            let tid = setTimeout(() => {
+                waitingForTarget = true;
+                showTarget();
+            }, delay);
+            timeoutIds.push(tid);
+        }
+
+        function showTarget() {
+            statusDisplay.textContent = "";
+            target.style.display = "block";
+            startTime = performance.now();
+            statusText.textContent = "快點擊！";
+        }
+
+        // 點擊目標圖案
+        function handleTargetClick(event) {
+            event.stopPropagation(); // 防止觸發 game-area 的點擊事件
+            if (waitingForTarget) {
+                const endTime = performance.now();
+                const reactionTime = (endTime - startTime) / 1000;
+                endGame(reactionTime.toFixed(3) + "s", "成功！");
+            }
+        }
+
+        // 點擊遊戲區域（用於判定太早按下）
+        function handleAreaClick() {
+            if (gameActive && !waitingForTarget) {
+                failGame("太早按了！");
+            }
+        }
+
+        function failGame(msg) {
+            clearAllTimeouts();
+            endGame("FAIL", msg);
+        }
+
+        function endGame(score, msg) {
+            gameActive = false;
+            waitingForTarget = false;
+            target.style.display = "none";
+            resultDisplay.textContent = score;
+            statusText.textContent = msg;
+            statusDisplay.textContent = "測試結束";
+            startBtn.disabled = false;
+        }
+
+        function resetGame() {
+            clearAllTimeouts();
+            lights.forEach(l => l.classList.remove('active'));
+            target.style.display = "none";
+            resultDisplay.textContent = "0.000s";
+            statusDisplay.textContent = "";
+            gameActive = false;
+            waitingForTarget = false;
+        }
+
+        function clearAllTimeouts() {
+            timeoutIds.forEach(id => clearTimeout(id));
+            timeoutIds = [];
+        }
+    </script>
+</body>
+</html>
